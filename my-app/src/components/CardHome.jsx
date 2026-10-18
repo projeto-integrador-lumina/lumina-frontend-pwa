@@ -3,6 +3,7 @@
 import React from 'react';
 import Image from 'next/image';
 import { Play } from 'lucide-react';
+import { useRouter } from "next/navigation";
 import avatarPiscando from '@/assets/avatar-piscando.svg';
 
 const CardHome = ({ titulo, bgColor, borderColor, onStart, playColor, pattern }) => {
