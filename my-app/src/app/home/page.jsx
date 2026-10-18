@@ -5,6 +5,7 @@ import BottomNav from "@/components/BottomNav";
 import CardHome from "@/components/CardHome";
 import Coins from "@/components/Coins";
 import DaysWeek from "@/components/DaysWeek";
+import { useRouter } from "next/navigation";
 
 import ImgHome from "@/assets/background-home.svg";
 import Bell from "@/assets/icons/notif.svg";
@@ -15,6 +16,12 @@ import BgCardPurple from "@/assets/fundo-card2.svg";
 
 const Home = () => {
   const bgUrl = ImgHome?.src || ImgHome;
+
+  const router = useRouter();
+  
+  const handleStart = () => {
+    router.push("/fases");
+  }
 
   return (
     /* Container que ocupa 100% do celular */
@@ -51,7 +58,7 @@ const Home = () => {
             bgColor="bg-secondary"
             borderColor="border-b-secondary-dark"
             playColor="text-secondary"
-            onStart={() => console.log("Iniciando...")}
+            onStart={handleStart}
             pattern={BgCardBlue}
           />
 
@@ -60,7 +67,6 @@ const Home = () => {
             bgColor="bg-quaternary"
             borderColor="border-b-quaternary-dark"
             playColor="text-quaternary"
-            onStart={() => console.log("Iniciando...")}
             pattern={BgCardPurple}
           />
         </div>
