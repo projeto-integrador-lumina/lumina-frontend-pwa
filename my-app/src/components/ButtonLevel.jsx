@@ -10,9 +10,9 @@ const ButtonLevel = ({ children, onStart }) => {
         <img src={Star.src || Star} alt="Estrela"></img>
         <img src={Star.src || Star} alt="Estrela"></img>
       </div>
-      <div className="flex justify-center items-center w-20 h-20 md:w-18 md:h-18 border-6 border-secondary rounded-full bg-[#97E8E5] shadow-lg">
-        <p className="text-white font-bold text-2xl">{children}</p>
-      </div>
+        <div className="flex justify-center items-center w-20 h-20 md:w-18 md:h-18 border-6 border-secondary rounded-full bg-[#97E8E5] shadow-lg">
+          <p className="text-white font-bold text-2xl">{children}</p>
+        </div>
     </div>
   );
 };
