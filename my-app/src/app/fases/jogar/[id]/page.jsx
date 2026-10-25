@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
+import { AnimatePresence } from "framer-motion";
 import {
   Volume,
   Volume2,
@@ -13,6 +14,7 @@ import {
 } from "lucide-react";
 import niveis from "./dados";
 import CardConclusao from "@/components/CardConclusao";
+import EntradaNivel from "@/components/EntradaNivel";
 
 //assets
 import Avatar from "@/assets/avatar-natasha.svg";
@@ -254,9 +256,20 @@ const PaginaLevel = () => {
     }
   };
 
+  //entrada do nível
+  const [ entrada, setEntrada ] = useState(true);
+
   return (
-    //responsivo: h-screen virou min-h-dvh (altura real visível do celular, sem a barra do navegador)
-    //os tamanhos grandes (avatar, margem, microfone) agora usam dvh: no celular alto ficam IGUAIS ao original e só diminuem se a tela for mais baixa
+    <div className="w-full h-screen relative">
+      <AnimatePresence>
+        {entrada && (
+          <EntradaNivel
+            key="animacao-entrada"
+            titulo={nivel?.titulo || "Nível 01 - A fazenda"}
+            onComplete={() => setEntrada(false)}
+          />
+        )}
+      </AnimatePresence>
     <div
       onClick={
         etapa.tipo !== "recompensa" &&
@@ -390,6 +403,7 @@ const PaginaLevel = () => {
           )}
         </div>
       </div>
+    </div>
     </div>
   );
 };
