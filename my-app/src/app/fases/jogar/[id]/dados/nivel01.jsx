@@ -1,6 +1,9 @@
 import Touro from "@/assets/touro.svg";
 import Cerca from "@/assets/cerca.svg";
 import Peru from "@/assets/peru.svg";
+import Vaca from "@/assets/vaca.svg";
+import Sapo from "@/assets/sapo.svg";
+import Pato from "@/assets/pato.svg";
 
 const nivel01 = {
     id: 1,
@@ -116,6 +119,49 @@ const nivel01 = {
             id: 16,
             tipo: "dialogo",
             fala: "Muito bem! Vamos prosseguir"
+        },
+        {
+            id: 17,
+            tipo: "selecionar_palavra",
+            fala: "Selecione o animal que tem som de R",
+            opcaoCorreta: "touro",
+            opcoes: [
+                {
+                    id: "vaca",
+                    palavra: "VACA",
+                    imagem: Vaca,
+                    corCard: "bg-[#F7D380]",
+                    pronuncia: "/audios/vaca.mp3"
+                },
+                {
+                    id: "sapo",
+                    palavra: "SAPO",
+                    imagem: Sapo,
+                    corCard: "bg-[#D8B4F8]",
+                    pronuncia: "/audios/sapo.mp3"
+                },
+                {
+                    id: "touro",
+                    palavra: "TOURO",
+                    imagem: Touro,
+                    corCard: "bg-[#F5B4B4]",
+                    pronuncia: "/audios/touro.mp3"
+                },
+                {
+                    id: "pato",
+                    palavra: "PATO",
+                    imagem: Pato,
+                    corCard: "bg-[#B5EAEA]",
+                    pronuncia: "/audios/pato.mp3"
+                }
+            ]
+        },
+        {
+            id: 18,
+            tipo: "conclusao",
+            nivel: 1,
+            fonema: "r/ medial",
+            moedas: 5
         }
     ]
 }
