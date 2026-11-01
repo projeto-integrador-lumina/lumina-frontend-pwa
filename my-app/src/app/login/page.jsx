@@ -8,7 +8,10 @@ import InputIcon from "@/components/InputIcon";
 import Button from "@/components/Button";
 import { User, Lock, Eye, EyeOff } from "lucide-react";
 
-const API_URL = "http://localhost:4000/api";
+const API_URL = (
+  process.env.NEXT_PUBLIC_API_URL ||
+  "http://localhost:4000"
+).replace(/\/+$/, "");
 
 export default function Login() {
   const router = useRouter();
@@ -34,16 +37,16 @@ export default function Login() {
     setErro("");
 
     try {
-      const resposta = await fetch(`${API_URL}/auth/login`, {
+      const resposta = await fetch(`${API_URL}/api/auth/login`, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
+          "Content-Type": "application/json"
         },
         body: JSON.stringify({
           usuario: usuario.trim().toLowerCase(),
           senha,
-          manter: manterConectado,
-        }),
+          manter: manterConectado
+        })
       });
 
       const dados = await resposta.json();
@@ -83,7 +86,11 @@ export default function Login() {
         router.replace("/home");
       }
     } catch (error) {
-      setErro(error.message || "Erro ao entrar.");
+      setErro(
+        error instanceof TypeError
+          ? "Não foi possível conectar à API. Verifique sua conexão e tente novamente."
+          : error.message || "Erro ao entrar."
+      );
     } finally {
       setCarregando(false);
     }
