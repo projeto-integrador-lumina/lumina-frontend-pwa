@@ -1,3 +1,4 @@
+
 import { Roboto } from "next/font/google";
 import "./globals.css";
 
@@ -9,30 +10,25 @@ const roboto = Roboto({
 
 export const metadata = {
   title: "Lolá - Gamificando a fala",
-  description: "PWA de fonoaudiologia infantil",
+  description: "Aplicativo web de fonoaudiologia infantil",
 };
 
 export const viewport = {
-    width: "device-width",
-    initialScale: 1,
-    maximumScale: 1,
-    userScalable: false,
-    viewportFit: "cover",
-  };
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="pt-BR" className="h-full w-full overflow-hidden">
+    <html lang="pt-BR">
       <body
-        className={`${roboto.className} antialiased bg-gray-100 h-full w-full flex items-center justify-center overflow-hidden p-0 md:p-4`}
+        className={`${roboto.className} min-h-dvh bg-[#f1f3f6] antialiased`}
       >
-        
-        <div className="w-full h-full md:w-[375px] md:h-[780px] md:max-h-[92vh] bg-white rounded-none md:rounded-[40px] flex flex-col relative shadow-none md:shadow-2xl border-0 md:border-gray-800 overflow-hidden shrink-0">
-          
-          <main className="flex-1 w-full h-full overflow-hidden relative">
+        <div className="mx-auto flex h-dvh min-h-0 w-full max-w-[430px] flex-col overflow-hidden bg-white">
+          <main className="relative min-h-0 w-full flex-1 overflow-hidden">
             {children}
           </main>
-
         </div>
       </body>
     </html>

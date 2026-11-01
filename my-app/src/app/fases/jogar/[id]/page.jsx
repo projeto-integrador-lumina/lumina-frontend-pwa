@@ -1,411 +1,851 @@
 "use client";
 
-import React, { useState } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
-  Volume,
+  ArrowLeft,
   Volume2,
   Mic,
   AudioLines,
-  ArrowRight,
-  ArrowLeft,
+  Sparkles,
+  CheckCircle2,
+  RotateCcw,
 } from "lucide-react";
+
 import niveis from "./dados";
 import CardConclusao from "@/components/CardConclusao";
 import EntradaNivel from "@/components/EntradaNivel";
-
-//assets
-import Avatar from "@/assets/avatar-natasha.svg";
-import BgFundo from "@/assets/bg-nivel.svg";
 import CardOpcao from "@/components/CardOpcao";
 
-const PaginaLevel = () => {
+import Avatar from "@/assets/avatar-natasha.svg";
+import BgFundo from "@/assets/bg-nivel.svg";
+
+const imagem = (arquivo) => arquivo?.src || arquivo;
+
+export default function PaginaLevel() {
   const router = useRouter();
   const params = useParams();
+  const reduzirMovimento = useReducedMotion();
 
-  //pega o número que tá na url
   const nivelId = params.id;
-
-  //buscando os dados que estão na index.js dentro do objeto niveis
   const nivel = niveis[nivelId];
 
-  //estado para saber em qual tela a criança está
+  const etapas = (nivel?.etapas || []).filter(
+    (item) => !(String(nivelId) === "1" && [7, 8].includes(item.id)),
+  );
+
   const [etapaAtual, setEtapaAtual] = useState(0);
+  const [entrada, setEntrada] = useState(true);
   const [gravando, setGravando] = useState(false);
-  const [jaFalou, setJaFalou] = useState(false); // Estado para saber se a criança já falou pelo menos uma vez
-
-  const [mediaRecorder, setMediaRecorder] = useState(null);
-  const [audioGravado, setAudioGravado] = useState(null);
+  const [ouvindo, setOuvindo] = useState(false);
+  const [lendoInstrucao, setLendoInstrucao] = useState(false);
   const [opcaoSelecionada, setOpcaoSelecionada] = useState(null);
-  const [statusResposta, setStatusResposta] = useState(null); // 'acertou' ou 'errou'
-  const [mensagemFeedback, setMensagemFeedback] = useState("");
   const [opcaoFocada, setOpcaoFocada] = useState(null);
+  const [statusResposta, setStatusResposta] = useState(null);
+  const [mensagemFeedback, setMensagemFeedback] = useState("");
+  const [processando, setProcessando] = useState(false);
+  const [erroMicrofone, setErroMicrofone] = useState("");
+  const [tentouMicrofone, setTentouMicrofone] = useState(false);
 
-  //selecionando os dados que estão no nivel01
-  const etapas = nivel ? nivel.etapas : [];
+  const recorderRef = useRef(null);
+  const streamRef = useRef(null);
+  const timerGravacaoRef = useRef(null);
+  const timerRespostaRef = useRef(null);
+  const audioRef = useRef(null);
+  const encerrandoRef = useRef(false);
+  const etapaRef = useRef(0);
+  const montadoRef = useRef(true);
 
-  //se etapa for etapaAtual for 1, vai salvar os dados do array de objetos na posição 1 (tela 1)
   const etapa = etapas[etapaAtual];
 
-  if (!nivel || !etapa) {
-    return (
-      <div className="p-4 text-center text-white">Nível não encontrado!</div>
-    );
-  }
+  const pararAudio = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      audioRef.current = null;
+    }
 
-  //função para avançar as telas a cada toque
-  const handleAvancar = () => {
+    setOuvindo(false);
+  };
+
+  const pararLeitura = () => {
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+
+    setLendoInstrucao(false);
+  };
+
+  const limparRecursosMicrofone = () => {
+    if (timerGravacaoRef.current) {
+      clearTimeout(timerGravacaoRef.current);
+      timerGravacaoRef.current = null;
+    }
+
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+  };
+
+  const pararGravacao = () => {
+    const recorder = recorderRef.current;
+
+    if (!recorder || recorder.state !== "recording") return;
+    if (encerrandoRef.current) return;
+
+    encerrandoRef.current = true;
+
+    if (timerGravacaoRef.current) {
+      clearTimeout(timerGravacaoRef.current);
+      timerGravacaoRef.current = null;
+    }
+
+    recorder.stop();
+  };
+
+  useEffect(() => {
+    montadoRef.current = true;
+
+    return () => {
+      montadoRef.current = false;
+
+      if (timerGravacaoRef.current) {
+        clearTimeout(timerGravacaoRef.current);
+      }
+
+      if (timerRespostaRef.current) {
+        clearTimeout(timerRespostaRef.current);
+      }
+
+      if (recorderRef.current?.state === "recording") {
+        recorderRef.current.onstop = null;
+        recorderRef.current.stop();
+      }
+
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      audioRef.current?.pause();
+
+      if ("speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    etapaRef.current = etapaAtual;
+
+    pararAudio();
+    pararLeitura();
+
     setGravando(false);
-    setJaFalou(false); // Reseta para a próxima etapa
-    //etapas.lenght tá contando quantos objetos tenho dentro do array, que simbolizam as minhas telas do figma
+    setOpcaoSelecionada(null);
+    setOpcaoFocada(null);
+    setStatusResposta(null);
+    setMensagemFeedback("");
+    setProcessando(false);
+    setErroMicrofone("");
+    setTentouMicrofone(false);
+  }, [etapaAtual]);
+
+  const avancar = () => {
+    if (gravando || processando) return;
+
+    pararAudio();
+    pararLeitura();
+
     if (etapaAtual < etapas.length - 1) {
-      setEtapaAtual((prev) => prev + 1);
+      setEtapaAtual((anterior) => anterior + 1);
     } else {
       router.push("/fases");
     }
   };
 
-  //função para tocar o áudio
-  const handleOuvirPalavra = (e) => {
-    e.stopPropagation();
-    if (etapa.pronuncia) {
-      const audio = new Audio(etapa.pronuncia);
+  const handleToqueTela = () => {
+    if (entrada) return;
 
-      audio.volume = 1.0;
-
-      audio
-        .play()
-        .catch((error) => console.log("Erro ao tocar o áudio: ", error));
-    } else {
-      console.log("Nenhum ficheiro de áudio definido para esta etapa!");
+    if (etapa?.tipo === "dialogo" || etapa?.tipo === "exercicio_ouvir") {
+      avancar();
     }
   };
 
-  //troca do símbolo de microfone
-  const handleMicrofoneClique = async (e) => {
-    e.stopPropagation();
+  const handleOuvirPalavra = (evento) => {
+    evento?.stopPropagation();
 
-    //se não estiver gravando, inicia a gravação
-    if (!gravando) {
-      try {
-        //pedir permissão pra gravr
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-        });
-        const recorder = new MediaRecorder(stream);
-        const chunks = [];
+    if (!etapa?.pronuncia) return;
 
-        // Configuração da Web Audio API para analisar o volume
-        const audioContext = new (
-          window.AudioContext || window.webkitAudioContext
-        )();
-        const analyser = audioContext.createAnalyser();
-        const microphone = audioContext.createMediaStreamSource(stream);
-        microphone.connect(analyser);
+    pararAudio();
+    pararLeitura();
 
-        analyser.fftSize = 512;
-        const bufferLength = analyser.frequencyBinCount;
-        const dataArray = new Uint8Array(bufferLength);
+    const audio = new Audio(etapa.pronuncia);
 
-        //guarda os pedaços de áudio gravados
-        recorder.ondataavailable = (event) => {
-          if (event.data.size > 0) {
-            chunks.push(event.data);
-          }
-        };
+    audioRef.current = audio;
+    audio.volume = 1;
 
-        let tempoSilencio = 0;
-        let jaDetectouFala = false;
-
-        // Monitora o volume em tempo real para detectar quando a criança para de falar
-        const checarVolume = setInterval(() => {
-          analyser.getByteFrequencyData(dataArray);
-
-          let soma = 0;
-          for (let i = 0; i < bufferLength; i++) {
-            soma += dataArray[i];
-          }
-          const volumeMedio = soma / bufferLength;
-
-          const LIMITE_VOZ = 15; // Sensibilidade para a fala da criança
-
-          if (volumeMedio > LIMITE_VOZ) {
-            jaDetectouFala = true;
-            tempoSilencio = 0; // Reseta o silêncio enquanto estiver falando
-          } else if (jaDetectouFala) {
-            tempoSilencio += 200;
-
-            // Para automaticamente após 1.5s de silêncio após ter falado
-            if (tempoSilencio >= 1500) {
-              pararGravacao();
-            }
-          }
-        }, 200);
-
-        const pararGravacao = () => {
-          clearInterval(checarVolume);
-          if (recorder.state === "recording") {
-            recorder.stop();
-          }
-          audioContext.close();
-        };
-
-        //quando a gravação parar, cria a url do áudio gravado
-        recorder.onstop = () => {
-          const blobAudio = new Blob(chunks, { type: "audio/webm" });
-          const urlAudio = URL.createObjectURL(blobAudio);
-          setAudioGravado(urlAudio);
-
-          //para de usar o microfone e mudar o ícone
-          stream.getTracks().forEach((track) => track.stop());
-          setGravando(false);
-
-          handleAvancar();
-        };
-
-        recorder.start();
-        setMediaRecorder(recorder);
-        setGravando(true);
-
-        // Limite de segurança de 8s para não ficar gravando infinitamente caso a criança não fale nada
-        setTimeout(() => {
-          if (recorder.state === "recording") {
-            pararGravacao();
-          }
-        }, 8000);
-      } catch (error) {
-        console.error("Erro ao acessar o microfone: ", error);
-        alert("Precisamos de permissão do microfone para fazer o exercício!");
+    audio.onended = () => {
+      if (audioRef.current === audio) {
+        audioRef.current = null;
+        setOuvindo(false);
       }
-    } else {
-      if (mediaRecorder && mediaRecorder.state === "recording") {
-        mediaRecorder.stop();
+    };
+
+    audio.onerror = () => {
+      if (audioRef.current === audio) {
+        audioRef.current = null;
+        setOuvindo(false);
       }
-      setGravando(false);
-      setJaFalou(true);
-    }
+    };
+
+    setOuvindo(true);
+
+    audio.play().catch(() => {
+      if (audioRef.current === audio) {
+        audioRef.current = null;
+        setOuvindo(false);
+      }
+    });
   };
 
-  const handleEscolherOpcao = (opcao) => {
-    setOpcaoSelecionada(opcao.id);
+  const handleLerInstrucao = (evento) => {
+    evento.stopPropagation();
 
-    if (etapa.opcaoCorreta) {
-      if (opcao.id === etapa.opcaoCorreta) {
-        //acertou?
-        setStatusResposta("acertou");
-        setMensagemFeedback("Muito bem! Você acertou!");
+    if (!("speechSynthesis" in window)) {
+      setMensagemFeedback(
+        "A leitura em voz alta não está disponível neste navegador.",
+      );
+      return;
+    }
 
-        //animação p/ ver o acerto
-        setTimeout(() => {
-          setOpcaoSelecionada(null);
-          setStatusResposta(null);
-          setMensagemFeedback("");
-          handleAvancar();
-        }, 1200);
+    if (lendoInstrucao) {
+      pararLeitura();
+      return;
+    }
+
+    pararAudio();
+    pararLeitura();
+
+    const texto =
+      mensagemFeedback || erroMicrofone || etapa?.fala || etapa?.instrucao;
+
+    if (!texto) return;
+
+    const leitura = new SpeechSynthesisUtterance(texto);
+
+    leitura.lang = "pt-BR";
+    leitura.rate = 0.85;
+    leitura.pitch = 1.08;
+    leitura.volume = 1;
+
+    leitura.onend = () => {
+      if (montadoRef.current) setLendoInstrucao(false);
+    };
+
+    leitura.onerror = () => {
+      if (montadoRef.current) setLendoInstrucao(false);
+    };
+
+    setLendoInstrucao(true);
+    window.speechSynthesis.speak(leitura);
+  };
+
+  const concluirExercicioFalar = () => {
+    setGravando(false);
+    setProcessando(true);
+    setErroMicrofone("");
+    setMensagemFeedback("Muito bem! Vamos continuar!");
+
+    timerRespostaRef.current = setTimeout(() => {
+      if (!montadoRef.current) return;
+
+      setProcessando(false);
+      setMensagemFeedback("");
+
+      if (etapaRef.current < etapas.length - 1) {
+        setEtapaAtual((anterior) => anterior + 1);
       } else {
-        //errou?
-        setStatusResposta("errou");
-        setMensagemFeedback("Ops! Que pena, você errou. Tente novamente!");
-
-        //limpa a seleção pra tentar de novo
-        setTimeout(() => {
-          setOpcaoSelecionada(null);
-          setStatusResposta(null);
-          setMensagemFeedback("");
-        }, 1500);
+        router.push("/fases");
       }
+    }, 1100);
+  };
+
+  const handleMicrofoneClique = async (evento) => {
+    evento.stopPropagation();
+
+    if (gravando) {
+      pararGravacao();
+      return;
+    }
+
+    if (processando) return;
+
+    setErroMicrofone("");
+    setTentouMicrofone(true);
+
+    pararAudio();
+    pararLeitura();
+
+    if (
+      !navigator.mediaDevices?.getUserMedia ||
+      typeof MediaRecorder === "undefined"
+    ) {
+      setErroMicrofone(
+        "Não foi possível usar o microfone. Você pode tentar novamente ou continuar.",
+      );
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+      });
+
+      if (!montadoRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+
+      streamRef.current = stream;
+
+      const recorder = new MediaRecorder(stream);
+
+      recorderRef.current = recorder;
+      encerrandoRef.current = false;
+
+      recorder.onstop = () => {
+        limparRecursosMicrofone();
+        recorderRef.current = null;
+        encerrandoRef.current = false;
+
+        if (montadoRef.current) {
+          concluirExercicioFalar();
+        }
+      };
+
+      recorder.onerror = () => {
+        limparRecursosMicrofone();
+        recorderRef.current = null;
+        encerrandoRef.current = false;
+
+        if (montadoRef.current) {
+          setGravando(false);
+          setErroMicrofone(
+            "Houve um problema com a gravação. Você pode tentar novamente ou continuar.",
+          );
+        }
+      };
+
+      recorder.start();
+      setGravando(true);
+
+      timerGravacaoRef.current = setTimeout(() => {
+        pararGravacao();
+      }, 3500);
+    } catch (erro) {
+      limparRecursosMicrofone();
+
+      recorderRef.current = null;
+      encerrandoRef.current = false;
+
+      setGravando(false);
+      setErroMicrofone(
+        "Não consegui acessar o microfone. Verifique a permissão ou continue.",
+      );
     }
   };
 
-  // Quando a criança clica no Card (apenas foca e toca áudio)
+  const handleContinuarSemMicrofone = (evento) => {
+    evento.stopPropagation();
+
+    if (gravando || processando) return;
+
+    concluirExercicioFalar();
+  };
+
   const handleFocarCard = (opcao) => {
+    if (processando) return;
+
     setOpcaoFocada(opcao.id);
+
     if (opcao.pronuncia) {
+      pararAudio();
+      pararLeitura();
+
       const audio = new Audio(opcao.pronuncia);
-      audio.play().catch((err) => console.log("Erro ao tocar áudio:", err));
+      audioRef.current = audio;
+
+      audio.play().catch(() => {});
     }
   };
 
-  // Quando a criança clica no botão SELECIONAR (valida o acerto/erro)
   const handleConfirmarResposta = (opcao) => {
+    if (processando) return;
+
+    pararAudio();
+    pararLeitura();
+
+    setProcessando(true);
     setOpcaoSelecionada(opcao.id);
     setOpcaoFocada(opcao.id);
 
-    if (opcao.id === etapa.opcaoCorreta) {
-      setStatusResposta("acertou");
-      setMensagemFeedback("Muito bem! Você acertou!");
+    const acertou = opcao.id === etapa.opcaoCorreta;
 
-      setTimeout(() => {
-        setOpcaoSelecionada(null);
-        setOpcaoFocada(null);
-        setStatusResposta(null);
-        setMensagemFeedback("");
-        handleAvancar();
-      }, 1200);
-    } else {
-      setStatusResposta("errou");
-      setMensagemFeedback("Ops! Tente novamente!");
+    setStatusResposta(acertou ? "acertou" : "errou");
+    setMensagemFeedback(
+      acertou
+        ? "Muito bem! Você acertou!"
+        : "Quase lá! Vamos tentar novamente?",
+    );
 
-      setTimeout(() => {
-        setOpcaoSelecionada(null);
-        setStatusResposta(null);
-        setMensagemFeedback("");
-      }, 1500);
-    }
+    timerRespostaRef.current = setTimeout(
+      () => {
+        if (!montadoRef.current) return;
+
+        if (acertou) {
+          setOpcaoSelecionada(null);
+          setOpcaoFocada(null);
+          setStatusResposta(null);
+          setMensagemFeedback("");
+          setProcessando(false);
+
+          if (etapaRef.current < etapas.length - 1) {
+            setEtapaAtual((anterior) => anterior + 1);
+          } else {
+            router.push("/fases");
+          }
+        } else {
+          setOpcaoSelecionada(null);
+          setStatusResposta(null);
+          setMensagemFeedback("");
+          setProcessando(false);
+        }
+      },
+      acertou ? 1400 : 1200,
+    );
   };
 
-  //entrada do nível
-  const [ entrada, setEntrada ] = useState(true);
+  if (!nivel || !etapa) {
+    return (
+      <div className="flex h-full items-center justify-center bg-[#ACECEA] px-6 text-center">
+        <p className="font-bold text-white">Nível não encontrado!</p>
+      </div>
+    );
+  }
+
+  const etapaDialogo = etapa.tipo === "dialogo";
+  const etapaOuvir = etapa.tipo === "exercicio_ouvir";
+  const etapaFalar = etapa.tipo === "exercicio_falar";
+  const etapaSelecao = etapa.tipo === "selecionar_palavra";
+  const etapaConclusao = etapa.tipo === "conclusao";
+
+  const podeAvancarTocando = etapaDialogo || etapaOuvir;
+  const progresso = ((etapaAtual + 1) / etapas.length) * 100;
+
+  const textoBalao =
+    erroMicrofone ||
+    mensagemFeedback ||
+    etapa.fala ||
+    etapa.instrucao ||
+    (etapaFalar ? "Agora é sua vez! Toque no microfone para falar." : "");
 
   return (
-    <div className="w-full h-screen relative">
+    <div className="relative h-full min-h-0 w-full overflow-hidden">
       <AnimatePresence>
         {entrada && (
           <EntradaNivel
-            key="animacao-entrada"
-            titulo={nivel?.titulo || "Nível 01 - A fazenda"}
+            key={`entrada-${nivelId}`}
+            titulo={nivel.titulo}
             onComplete={() => setEntrada(false)}
           />
         )}
       </AnimatePresence>
-    <div
-      onClick={
-        etapa.tipo !== "recompensa" &&
-        etapa.tipo !== "conclusao" &&
-        (etapa.tipo === "dialogo" || etapa.tipo === "exercicio_ouvir")
-          ? handleAvancar
-          : undefined
-      }
-      className="w-full min-h-dvh overflow-x-hidden"
-    >
+
       <div
-        className="flex w-full min-h-dvh bg-no-repeat bg-center bg-cover bg-top"
-        style={{ backgroundImage: `url(${BgFundo.src || BgFundo})` }}
+        onClick={handleToqueTela}
+        className={`relative h-full min-h-0 w-full overflow-y-auto overflow-x-hidden bg-cover bg-center bg-no-repeat ${
+          podeAvancarTocando ? "cursor-pointer" : ""
+        }`}
+        style={{
+          backgroundImage: `url("${imagem(BgFundo)}")`,
+        }}
       >
-
-        <div className="w-full min-w-0 flex flex-col justify-center items-center px-6 min-[360px]:px-8 pt-[max(2rem,env(safe-area-inset-top))] pb-[max(2rem,env(safe-area-inset-bottom))]">
-          <div className="flex w-full items-center justify-between gap-4">
-            <Link href="/fases" className="shrink-0">
-              <ArrowLeft className="text-white w-10 h-10"></ArrowLeft>
+        <div className="flex min-h-full w-full flex-col px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(1.25rem,env(safe-area-inset-top))]">
+          <header className="flex w-full shrink-0 items-center gap-4">
+            <Link
+              href="/fases"
+              onClick={(evento) => evento.stopPropagation()}
+              aria-label="Voltar para as fases"
+              className="flex h-11 w-11 shrink-0 items-center justify-center text-white"
+            >
+              <ArrowLeft size={32} strokeWidth={2.5} />
             </Link>
-            <div className="w-full flex gap-2 justify-center items-center">
-              <span className="w-full h-3 bg-tertiary/50 rounded-full"></span>
-              <p className="text-white font-semibold text-sm shrink-0">1/5</p>
-            </div>
-          </div>
 
-          {etapa.silaba ? (
-            <div className="flex flex-col items-center px-8 min-[360px]:px-14 md:px-12 py-4 w-full gap-y-4 mt-2">
-              
-              <div className="w-full p-6 h-[clamp(7rem,16.6dvh,8.75rem)] flex justify-center items-center bg-primary rounded-[24px]">
-                <img
-                  src={etapa.imagem?.src || etapa.imagem}
-                  alt="Exercício"
-                  className="max-h-full max-w-full object-contain"
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              <div className="h-3 flex-1 overflow-hidden rounded-full bg-white/40">
+                <motion.div
+                  initial={false}
+                  animate={{ width: `${progresso}%` }}
+                  transition={{ duration: 0.45 }}
+                  className="h-full rounded-full bg-[#F8B140]"
                 />
               </div>
 
-              <div className="flex flex-wrap gap-3 justify-center items-center">
-                {etapa.silaba.map((sil, index) => (
+              <span className="shrink-0 text-xs font-extrabold text-white">
+                {etapaAtual + 1}/{etapas.length}
+              </span>
+            </div>
+          </header>
+
+          <div className="flex min-h-0 w-full flex-1 flex-col">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={etapa.id}
+                initial={
+                  reduzirMovimento ? false : { opacity: 0, y: 20, scale: 0.96 }
+                }
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={
+                  reduzirMovimento
+                    ? { opacity: 0 }
+                    : { opacity: 0, y: -15, scale: 0.97 }
+                }
+                transition={{
+                  duration: reduzirMovimento ? 0.1 : 0.32,
+                }}
+                className="w-full"
+              >
+                {etapa.silaba && (
+                  <div className="mt-5 flex w-full flex-col items-center gap-4">
+                    <motion.div
+                      initial={
+                        reduzirMovimento
+                          ? false
+                          : { scale: 0.7, opacity: 0, rotate: -5 }
+                      }
+                      animate={{ scale: 1, opacity: 1, rotate: 0 }}
+                      transition={{
+                        type: "spring",
+                        stiffness: 180,
+                        damping: 14,
+                      }}
+                      className="flex h-[clamp(115px,19dvh,165px)] w-[min(100%,270px)] items-center justify-center rounded-[26px] bg-primary p-5 shadow-lg"
+                    >
+                      <motion.img
+                        src={imagem(etapa.imagem)}
+                        alt={etapa.palavra || "Animal"}
+                        className="h-full max-w-full object-contain"
+                        animate={reduzirMovimento ? {} : { y: [0, -4, 0] }}
+                        transition={{
+                          duration: 2.4,
+                          repeat: Infinity,
+                          ease: "easeInOut",
+                        }}
+                      />
+                    </motion.div>
+
+                    <div className="flex flex-wrap items-center justify-center gap-3">
+                      {etapa.silaba.map((silaba, indice) => (
+                        <motion.div
+                          key={`${etapa.id}-${indice}`}
+                          initial={
+                            reduzirMovimento
+                              ? false
+                              : { opacity: 0, y: -20, scale: 0.7 }
+                          }
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          transition={{
+                            delay: reduzirMovimento ? 0 : indice * 0.15,
+                            type: "spring",
+                            stiffness: 220,
+                            damping: 13,
+                          }}
+                          className="flex min-h-14 min-w-16 items-center justify-center rounded-xl bg-primary px-4 py-2 shadow-md"
+                        >
+                          <span className="text-2xl font-black text-white">
+                            {silaba}
+                          </span>
+                        </motion.div>
+                      ))}
+                    </div>
+
+                    {(etapaOuvir || etapaFalar) && (
+                      <motion.button
+                        type="button"
+                        onClick={handleOuvirPalavra}
+                        whileTap={{ scale: 0.92 }}
+                        animate={
+                          ouvindo && !reduzirMovimento
+                            ? { scale: [1, 1.07, 1] }
+                            : {}
+                        }
+                        transition={{
+                          duration: 0.85,
+                          repeat: ouvindo ? Infinity : 0,
+                        }}
+                        className="flex min-h-11 items-center justify-center gap-2 rounded-full bg-[#3AA2ED] px-6 py-2.5 text-white shadow-md"
+                      >
+                        <Volume2 size={21} />
+
+                        <span className="text-sm font-bold">
+                          {ouvindo ? "Reproduzindo..." : "Ouvir"}
+                        </span>
+                      </motion.button>
+                    )}
+                  </div>
+                )}
+
+                {etapaSelecao && etapa.opcoes && (
                   <div
-                    key={index}
-                    className="flex justify-center items-center bg-primary p-4 rounded-[12px]"
+                    onClick={(evento) => evento.stopPropagation()}
+                    className="mx-auto mt-5 grid w-[82%] max-w-[290px] grid-cols-2 gap-x-2 gap-y-3"
                   >
-                    <p className="text-white font-bold text-3xl">{sil}</p>
+                    {etapa.opcoes.map((opcao, indice) => (
+                      <motion.div
+                        key={opcao.id}
+                        initial={
+                          reduzirMovimento
+                            ? false
+                            : { opacity: 0, y: 25, scale: 0.85 }
+                        }
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        transition={{
+                          delay: reduzirMovimento ? 0 : indice * 0.1,
+                          type: "spring",
+                          stiffness: 190,
+                          damping: 15,
+                        }}
+                        className="min-w-0"
+                      >
+                        <motion.div
+                          animate={
+                            statusResposta === "errou" &&
+                            opcaoSelecionada === opcao.id &&
+                            !reduzirMovimento
+                              ? { x: [-7, 7, -5, 5, 0] }
+                              : statusResposta === "acertou" &&
+                                  opcaoSelecionada === opcao.id &&
+                                  !reduzirMovimento
+                                ? { scale: [1, 1.08, 1] }
+                                : {}
+                          }
+                          transition={{ duration: 0.4 }}
+                        >
+                          <CardOpcao
+                            imagem={opcao.imagem}
+                            palavra={opcao.palavra}
+                            corCard={opcao.corCard}
+                            audioPronuncia={opcao.pronuncia}
+                            focado={opcaoFocada === opcao.id}
+                            selecionado={opcaoSelecionada === opcao.id}
+                            status={
+                              opcaoSelecionada === opcao.id
+                                ? statusResposta
+                                : null
+                            }
+                            onFocar={() => handleFocarCard(opcao)}
+                            onConfirmar={() => handleConfirmarResposta(opcao)}
+                          />
+                        </motion.div>
+                      </motion.div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                )}
 
-              {(etapa.tipo === "exercicio_ouvir" ||
-                etapa.tipo === "exercicio_falar") && (
-                <button
-                  onClick={handleOuvirPalavra}
-                  className="mt-1 transition-transform active:scale-95"
-                >
-                  <div className="flex bg-[#3AA2ED] px-6 py-2 justify-center items-center gap-3 rounded-full">
-                    <Volume2 className="text-white w-5" />
-                    <p className="text-white text-sm">Ouvir</p>
+                {etapaConclusao && (
+                  <div
+                    onClick={(evento) => evento.stopPropagation()}
+                    className="flex flex-1 items-center justify-center py-6"
+                  >
+                    <CardConclusao
+                      nivel={etapa.nivel}
+                      fonema={etapa.fonema}
+                      moedas={etapa.moedas}
+                      onProximo={() => router.push("/fases")}
+                    />
                   </div>
-                </button>
-              )}
-            </div>
-          ) : etapa.tipo === "selecionar_palavra" && etapa.opcoes ? (
-            <div className="grid grid-cols-2 gap-x-4 gap-y-3 p-2 justify-items-center items-center my-auto mt-2">
-              {etapa.opcoes.map((opcao) => (
-                <CardOpcao
-                  key={opcao.id}
-                  imagem={opcao.imagem}
-                  palavra={opcao.palavra}
-                  corCard={opcao.corCard}
-                  audioPronuncia={opcao.pronuncia}
-                  focado={opcaoFocada === opcao.id}
-                  selecionado={opcaoSelecionada === opcao.id}
-                  status={opcaoSelecionada === opcao.id ? statusResposta : null}
-                  onFocar={() => handleFocarCard(opcao)}
-                  onConfirmar={() => handleConfirmarResposta(opcao)}
-                />
-              ))}
-            </div>
-          ) : etapa.tipo === "conclusao" ? (
-            <CardConclusao
-              nivel={etapa.nivel}
-              fonema={etapa.fonema}
-              moedas={etapa.moedas}
-              onProximo={() => router.push("/fases")}
-            ></CardConclusao>
-          ) : null}
+                )}
+              </motion.div>
+            </AnimatePresence>
 
-          <div className="flex flex-1 justify-start w-full items-end mb-[clamp(2rem,10dvh,7.5rem)]">
-            <img
-              src={Avatar.src}
-              alt="Avatar"
-              className="h-[clamp(8rem,23.7dvh,12.5rem)] md:h-auto w-auto shrink-0"
-            ></img>
+            {!etapaConclusao && (
+              <div className="mt-auto flex w-full flex-col pt-5">
+                <div className="flex min-h-[145px] w-full items-end">
+                  <motion.img
+                    src={imagem(Avatar)}
+                    alt="Natasha"
+                    initial={reduzirMovimento ? false : { opacity: 0, x: -30 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{
+                      duration: 0.55,
+                      ease: "easeOut",
+                    }}
+                    className="h-[clamp(125px,23dvh,200px)] w-auto max-w-[42%] shrink-0 object-contain"
+                  />
 
-            {etapa.fala && (
-              <div className="relative min-w-0 bg-white rounded-[32px] p-4 shadow-lg text-center flex flex-col items-center justify-center border-1 border-[#985C40] -translate-y-[clamp(3rem,11.8dvh,6.25rem)]">
-                <p className="text-xs sm:text-sm text-[#985C40] leading-snug font-medium break-words">
-                  {mensagemFeedback || etapa.fala || etapa.instrucao}
-                </p>
+                  {textoBalao && (
+                    <div
+                      onClick={(evento) => evento.stopPropagation()}
+                      className="relative mb-12 ml-1 flex min-w-0 flex-1 flex-col items-center justify-center rounded-[26px] border-2 border-[#985C40] bg-white px-3 py-3 text-center shadow-lg"
+                    >
+                      <AnimatePresence mode="wait">
+                        <motion.p
+                          key={`${etapa.id}-${textoBalao}`}
+                          initial={
+                            reduzirMovimento ? false : { opacity: 0, y: 8 }
+                          }
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -6 }}
+                          transition={{ duration: 0.2 }}
+                          className="break-words text-[clamp(11px,3.3vw,14px)] font-semibold leading-relaxed text-[#985C40]"
+                        >
+                          {textoBalao}
+                        </motion.p>
+                      </AnimatePresence>
 
-                <button
-                  onClick={handleOuvirPalavra}
-                  className="mt-2 text-gray-500 hover:text-gray-800 transition-transform active:scale-90"
-                >
-                  <Volume2 className="text-[#985C40]" />
-                </button>
+                      <motion.button
+                        type="button"
+                        onClick={handleLerInstrucao}
+                        whileTap={{ scale: 0.88 }}
+                        aria-label={
+                          lendoInstrucao
+                            ? "Parar leitura da instrução"
+                            : "Ouvir instrução"
+                        }
+                        className={`mt-2 flex h-8 w-8 items-center justify-center rounded-full ${
+                          lendoInstrucao ? "bg-[#FCE6D9]" : "bg-transparent"
+                        }`}
+                      >
+                        <Volume2 size={21} className="text-[#985C40]" />
+                      </motion.button>
 
-                <div className="absolute left-[-10px] top-1/2 -translate-y-1/2 w-0 h-0 border-y-[8px] border-y-transparent border-r-[12px] border-r-white z-10" />
-                <div className="absolute left-[-12px] top-1/2 -translate-y-1/2 w-0 h-0 border-y-[9px] border-y-transparent border-r-[13px] border-r-[#985C40] z-0" />
+                      <div className="absolute -left-[11px] top-1/2 h-0 w-0 -translate-y-1/2 border-y-[9px] border-r-[12px] border-y-transparent border-r-[#985C40]" />
+
+                      <div className="absolute -left-[8px] top-1/2 h-0 w-0 -translate-y-1/2 border-y-[7px] border-r-[10px] border-y-transparent border-r-white" />
+                    </div>
+                  )}
+                </div>
+
+                {etapaFalar ? (
+                  <div
+                    onClick={(evento) => evento.stopPropagation()}
+                    className="flex flex-col items-center gap-2 pb-3"
+                  >
+                    <div className="relative flex items-center justify-center">
+                      {gravando && !reduzirMovimento && (
+                        <>
+                          {[0, 1].map((indice) => (
+                            <motion.div
+                              key={indice}
+                              initial={{ scale: 1, opacity: 0.65 }}
+                              animate={{ scale: 1.8, opacity: 0 }}
+                              transition={{
+                                duration: 1.4,
+                                repeat: Infinity,
+                                delay: indice * 0.7,
+                              }}
+                              className="absolute h-[76px] w-[76px] rounded-full bg-[#F8B140]/50"
+                            />
+                          ))}
+                        </>
+                      )}
+
+                      <motion.button
+                        type="button"
+                        onClick={handleMicrofoneClique}
+                        disabled={processando}
+                        whileTap={{ scale: 0.9 }}
+                        className={`relative z-10 flex h-[76px] w-[76px] items-center justify-center rounded-full border-4 border-white text-white shadow-lg disabled:opacity-60 ${
+                          gravando ? "bg-[#EF7774]" : "bg-primary"
+                        }`}
+                        aria-label={
+                          gravando ? "Finalizar gravação" : "Começar gravação"
+                        }
+                      >
+                        {gravando ? (
+                          <AudioLines size={34} />
+                        ) : (
+                          <Mic size={34} />
+                        )}
+                      </motion.button>
+                    </div>
+
+                    <p className="text-center text-sm font-bold text-white drop-shadow-sm">
+                      {gravando
+                        ? "Estou ouvindo você..."
+                        : processando
+                          ? "Muito bem!"
+                          : "Toque para falar"}
+                    </p>
+
+                    {erroMicrofone && tentouMicrofone && !processando && (
+                      <button
+                        type="button"
+                        onClick={handleContinuarSemMicrofone}
+                        className="rounded-full bg-white/90 px-4 py-2 text-xs font-bold text-[#985C40] shadow-sm"
+                      >
+                        Continuar sem microfone
+                      </button>
+                    )}
+                  </div>
+                ) : podeAvancarTocando ? (
+                  <motion.p
+                    initial={{ opacity: 0.5 }}
+                    animate={
+                      reduzirMovimento
+                        ? { opacity: 1 }
+                        : { opacity: [0.5, 1, 0.5] }
+                    }
+                    transition={{
+                      duration: 1.8,
+                      repeat: reduzirMovimento ? 0 : Infinity,
+                    }}
+                    className="pb-3 text-center text-sm font-semibold text-white drop-shadow-sm"
+                  >
+                    Toque para continuar
+                  </motion.p>
+                ) : etapaSelecao ? (
+                  <div className="flex min-h-12 items-center justify-center pb-3">
+                    <AnimatePresence mode="wait">
+                      {statusResposta === "acertou" ? (
+                        <motion.div
+                          key="acerto"
+                          initial={{ opacity: 0, scale: 0.7 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          className="flex items-center gap-2 rounded-full bg-[#55B878] px-4 py-2 text-sm font-bold text-white"
+                        >
+                          <CheckCircle2 size={19} />
+                          Muito bem!
+                          <Sparkles size={17} />
+                        </motion.div>
+                      ) : statusResposta === "errou" ? (
+                        <motion.div
+                          key="erro"
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="flex items-center gap-2 rounded-full bg-[#F8B140] px-4 py-2 text-sm font-bold text-white"
+                        >
+                          <RotateCcw size={18} />
+                          Tente outra vez!
+                        </motion.div>
+                      ) : (
+                        <motion.p
+                          key="instrucao"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          className="text-center text-sm font-semibold text-white drop-shadow-sm"
+                        >
+                          Escolha o animal correto
+                        </motion.p>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                ) : null}
               </div>
             )}
           </div>
-
-          {etapa.tipo === "exercicio_falar" ? (
-            <button
-              onClick={handleMicrofoneClique}
-              className="transition-transform active:scale-95"
-            >
-              <div className="flex w-[clamp(4.5rem,11.8dvh,6.25rem)] h-[clamp(4.5rem,11.8dvh,6.25rem)] justify-center items-center p-4 rounded-full bg-primary -mt-[clamp(3rem,9.5dvh,5rem)]">
-                {gravando ? (
-                  <AudioLines className="text-white w-10 h-10 animate-pulse"></AudioLines>
-                ) : (
-                  <Mic className="text-white w-10 h-10"></Mic>
-                )}
-              </div>
-            </button>
-          ) : (
-            <div className="flex justify-center items-center">
-              <p className="text-white text-base">Toque para continuar</p>
-            </div>
-          )}
         </div>
       </div>
     </div>
-    </div>
   );
-};
-
-export default PaginaLevel;
+}

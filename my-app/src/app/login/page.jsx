@@ -1,70 +1,208 @@
+
 "use client";
-import React, { useState } from "react";
+
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Logo from "@/components/LogoLola";
 import InputIcon from "@/components/InputIcon";
 import Button from "@/components/Button";
-import { User, Lock } from 'lucide-react';
+import { User, Lock, Eye, EyeOff } from "lucide-react";
 
-const Login = () => {
+const API_URL = "http://localhost:4000/api";
+
+export default function Login() {
+  const router = useRouter();
+
   const [usuario, setUsuario] = useState("");
   const [senha, setSenha] = useState("");
   const [manterConectado, setManterConectado] = useState(false);
+  const [mostrarSenha, setMostrarSenha] = useState(false);
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState("");
 
-  //muda de rota sem precisar recarregar o navegador
-  const router = useRouter();
+  async function entrar(evento) {
+    evento.preventDefault();
 
-  const handleSumit = (e) => {
-    e.preventDefault(); //processa em segundo plano o envio das informações
-    console.log({ usuario, senha, manterConectado });
+    if (carregando) return;
 
-    //redireciona para a página inicial do jogo
-    router.push("/home");
-  };
+    if (!usuario.trim() || !senha) {
+      setErro("Informe seu usuário e sua senha.");
+      return;
+    }
+
+    setCarregando(true);
+    setErro("");
+
+    try {
+      const resposta = await fetch(`${API_URL}/auth/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          usuario: usuario.trim().toLowerCase(),
+          senha,
+          manter: manterConectado,
+        }),
+      });
+
+      const dados = await resposta.json();
+
+      if (!resposta.ok) {
+        throw new Error(
+          dados.error || "Não foi possível entrar."
+        );
+      }
+
+      if (!dados.token) {
+        throw new Error("Token de autenticação não recebido.");
+      }
+
+      if (dados.tipo !== "Paciente") {
+        throw new Error(
+          "Este aplicativo é destinado aos pacientes e responsáveis."
+        );
+      }
+
+      localStorage.removeItem("token");
+      sessionStorage.removeItem("token");
+
+      const armazenamento = manterConectado
+        ? localStorage
+        : sessionStorage;
+
+      armazenamento.setItem("token", dados.token);
+      armazenamento.setItem("nome", dados.nome || "");
+      armazenamento.setItem("tipo", dados.tipo);
+
+      if (dados.precisaTrocarSenha) {
+        sessionStorage.setItem("trocaSenhaPendente", "true");
+        router.replace("/home/primeiro-acesso");
+      } else {
+        sessionStorage.removeItem("trocaSenhaPendente");
+        router.replace("/home");
+      }
+    } catch (error) {
+      setErro(error.message || "Erro ao entrar.");
+    } finally {
+      setCarregando(false);
+    }
+  }
 
   return (
-    <div className="flex-1 flex flex-col bg-white relative min-h-full">
-      <div className="h-44 flex items-center justify-center pt-4 bg-secondary">
+    <div className="flex h-full min-h-0 flex-col overflow-y-auto bg-white">
+      <div className="flex h-44 shrink-0 items-center justify-center bg-secondary pt-4">
         <Logo className="h-24" />
       </div>
 
-      <div className="flex-1 bg-white rounded-t-[32px] px-6 pt-8 pb-6 flex flex-col justify-start -mt-4 z-10 shadow-lg">
-        <h1 className="text-2xl font-bold text-primary text-center mb-8">
-          Login
-        </h1>
+      <div className="relative z-10 -mt-4 flex flex-1 flex-col rounded-t-[32px] bg-white px-6 pb-8 pt-8 shadow-lg">
+        <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center">
+          <h1 className="mb-3 text-center text-2xl font-bold text-primary">
+            Login
+          </h1>
 
-        <form onSubmit={handleSumit} className="flex flex-col gap-4">
-          <InputIcon
-            icon={<User className="w-5 h-5 text-primary"/>}
-            type="text"
-            placeholder="Digite o nome do seu usuário"
-            value={usuario}
-            onChange={(e) => setUsuario(e.target.value)}
-          ></InputIcon>
+          <p className="mb-8 text-center text-sm leading-6 text-text-main/70">
+            Entre com os dados fornecidos pela sua fonoaudióloga.
+          </p>
 
-          <InputIcon
-            icon={<Lock className="w-5 h-5 text-primary"/>}
-            type="password"
-            placeholder="Digite a sua senha"
-            value={senha}
-            onChange={(e) => setSenha(e.target.value)}
-          ></InputIcon>
+          <form onSubmit={entrar} className="flex flex-col gap-5">
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-text-main">
+                Nome de usuário
+              </label>
 
-          <Button>Entrar</Button>
+              <InputIcon
+                icon={<User className="h-5 w-5 text-primary" />}
+                type="text"
+                placeholder="Digite seu usuário"
+                value={usuario}
+                onChange={(evento) => {
+                  setUsuario(evento.target.value);
+                  setErro("");
+                }}
+              />
+            </div>
 
-          <label className="flex items-center gap-2 mt-2 cursor-pointer text-xs text-text-main font-medium select-none px-1">
-            <input
-              type="checkbox"
-              checked={manterConectado}
-              onChange={(e) => setManterConectado(e.target.checked)}
-              className="w-4 h-4 accent-coral rounded-full"
-            />
-            <span>Manter-me conectado</span>
-          </label>
-        </form>
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-text-main">
+                Senha
+              </label>
+
+              <div className="relative">
+                <InputIcon
+                  icon={<Lock className="h-5 w-5 text-primary" />}
+                  type={mostrarSenha ? "text" : "password"}
+                  placeholder="Digite sua senha"
+                  value={senha}
+                  onChange={(evento) => {
+                    setSenha(evento.target.value);
+                    setErro("");
+                  }}
+                />
+
+                <button
+                  type="button"
+                  onClick={() => setMostrarSenha(!mostrarSenha)}
+                  aria-label={
+                    mostrarSenha ? "Ocultar senha" : "Mostrar senha"
+                  }
+                  className="absolute inset-y-0 right-2 flex items-center px-3 text-gray-500"
+                >
+                  {mostrarSenha ? (
+                    <EyeOff className="h-5 w-5" />
+                  ) : (
+                    <Eye className="h-5 w-5" />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {erro && (
+              <p
+                role="alert"
+                className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-600"
+              >
+                {erro}
+              </p>
+            )}
+
+            <Button
+              type="submit"
+              className={`w-full ${
+                carregando
+                  ? "pointer-events-none opacity-60"
+                  : ""
+              }`}
+            >
+              {carregando ? "Entrando..." : "Entrar"}
+            </Button>
+
+            <label className="flex cursor-pointer items-center gap-2 px-1 text-xs font-medium text-text-main">
+              <input
+                type="checkbox"
+                checked={manterConectado}
+                onChange={(evento) =>
+                  setManterConectado(evento.target.checked)
+                }
+                className="h-4 w-4 accent-primary"
+              />
+              Manter-me conectado
+            </label>
+          </form>
+
+          <div className="mt-8 rounded-2xl bg-secondary/10 p-4 text-center">
+            <p className="text-sm font-semibold text-primary">
+              Primeiro acesso?
+            </p>
+
+            <p className="mt-2 text-xs leading-5 text-text-main/70">
+              Utilize a senha recebida da fonoaudióloga.
+              Depois de entrar, você poderá criar uma senha
+              só sua.
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );
-};
-
-export default Login;
+}
