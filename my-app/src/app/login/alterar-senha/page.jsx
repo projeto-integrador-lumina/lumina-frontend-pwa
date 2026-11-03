@@ -100,10 +100,10 @@ export default function AlterarSenha() {
   }, [router]);
 
   function voltar() {
-    router.push(
-      primeiroAcesso ? "/primeiro-acesso" : "/configuracoes"
-    );
-  }
+  router.push(
+    primeiroAcesso ? "/home/primeiro-acesso" : "/configuracoes"
+  );
+}
 
   async function salvarSenha(evento) {
     evento.preventDefault();
