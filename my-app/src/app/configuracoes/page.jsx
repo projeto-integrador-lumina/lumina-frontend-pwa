@@ -14,6 +14,7 @@ import {
   LogOut,
   ChevronRight,
   ChevronDown,
+  MessageCircle,
 } from "lucide-react";
 
 const opcoes = [
@@ -31,6 +32,11 @@ const opcoes = [
     id: "acessibilidade",
     titulo: "Acessibilidade",
     Icone: Accessibility,
+  },
+  {
+    id: "mensagens",
+    titulo: "Mensagens",
+    Icone: MessageCircle,
   },
   {
     id: "seguranca",
@@ -71,22 +77,27 @@ export default function Configuracoes() {
     }
 
     if (id === "som") {
-      router.push("/configuracoes/som");
+      router.push("#");
       return;
     }
 
     if (id === "desempenho") {
-      router.push("/configuracoes/desempenho");
+      router.push("#");
       return;
     }
 
     if (id === "acessibilidade") {
-      router.push("/configuracoes/acessibilidade");
+      router.push("#");
+      return;
+    }
+
+    if (id === "mensagens") {
+      router.push("/mensagens");
       return;
     }
 
     if (id === "ajuda") {
-      router.push("/configuracoes/ajuda");
+      router.push("#");
     }
   }
 
@@ -94,19 +105,25 @@ export default function Configuracoes() {
     localStorage.removeItem("token");
     localStorage.removeItem("nome");
     localStorage.removeItem("tipo");
+    localStorage.removeItem("trocaSenhaPendente");
 
     sessionStorage.removeItem("token");
     sessionStorage.removeItem("nome");
     sessionStorage.removeItem("tipo");
     sessionStorage.removeItem("trocaSenhaPendente");
 
+    setConfirmarSaida(false);
+
     router.replace("/login");
+    router.refresh();
   }
 
   if (verificando) {
     return (
       <div className="flex h-full w-full items-center justify-center bg-white">
-        <p className="text-sm text-gray-500">Carregando...</p>
+        <p className="text-sm text-gray-500">
+          Carregando...
+        </p>
       </div>
     );
   }
@@ -175,7 +192,7 @@ export default function Configuracoes() {
                       <button
                         type="button"
                         onClick={() =>
-                          router.push("/alterar-senha")
+                          router.push("/login/alterar-senha")
                         }
                         className="flex min-h-[52px] w-full items-center gap-3 px-4 text-left text-[#D96E68] transition hover:bg-[#FFEAE7]"
                       >
@@ -186,23 +203,6 @@ export default function Configuracoes() {
 
                         <span className="flex-1 text-[13px] font-medium">
                           Alterar senha
-                        </span>
-
-                        <ChevronRight size={16} />
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setConfirmarSaida(true)}
-                        className="flex min-h-[52px] w-full items-center gap-3 border-t border-[#F8DFDB] px-4 text-left text-[#D96E68] transition hover:bg-[#FFEAE7]"
-                      >
-                        <LogOut
-                          size={18}
-                          className="shrink-0"
-                        />
-
-                        <span className="flex-1 text-[13px] font-medium">
-                          Encerrar sessão
                         </span>
 
                         <ChevronRight size={16} />
@@ -218,8 +218,9 @@ export default function Configuracoes() {
             <button
               type="button"
               onClick={() => setConfirmarSaida(true)}
-              className="rounded-lg px-2 py-3 text-[14px] font-medium text-[#EB7770] transition hover:bg-[#FFF4F2]"
+              className="flex items-center gap-2 rounded-lg px-2 py-3 text-[14px] font-medium text-[#EB7770] transition hover:bg-[#FFF4F2]"
             >
+              <LogOut size={17} />
               Sair do jogo
             </button>
           </div>
@@ -249,8 +250,9 @@ export default function Configuracoes() {
             </h2>
 
             <p className="mt-3 text-center text-sm leading-6 text-gray-500">
-              Você precisará entrar novamente com seu
-              usuário e senha para continuar jogando.
+              Sua sessão será encerrada. Para entrar
+              novamente, será necessário informar seu
+              usuário e senha.
             </p>
 
             <div className="mt-7 flex flex-col gap-3">
