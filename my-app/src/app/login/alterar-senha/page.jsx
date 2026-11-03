@@ -12,7 +12,10 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
-const API_URL = "http://localhost:4000";
+const API_URL = (
+  process.env.NEXT_PUBLIC_API_URL ||
+  "https://lumina-backend-6mk6.onrender.com"
+).replace(/\/+$/, "");
 
 function CampoSenha({
   titulo,
